@@ -1,0 +1,54 @@
+name: Build & tests
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+        fail-fast: false
+        matrix:
+            php: ['7.0','7.1','7.3','7.4','8.0']
+            include:
+              - php: '7.0'
+                valgrind: true
+              - php: '7.1'
+                valgrind: true
+              - php: '7.2'
+                valgrind: true
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Install PHP
+      env:
+        PHP_VERSION: ${{ matrix.php }}
+      run: |
+        sudo add-apt-repository ppa:ondrej/php
+        sudo apt-get update
+        sudo apt-get install -y php${PHP_VERSION}-dev valgrind
+
+    - name: APCu build & test
+      env:
+        USE_VALGRIND: ${{ matrix.valgrind }}
+      run: |
+        phpize
+        ./configure --enable-apcu-debug
+        make
+        REPORT_EXIT_STATUS=1 php -n run-tests.php -n -d extension_dir=./modules/ -d extension=apcu.so -d apc.enable_cli=1 -d apc.serializer=default -P --show-diff --set-timeout 120
+        REPORT_EXIT_STATUS=1 php -n run-tests.php -n -d extension_dir=./modules/ -d extension=apcu.so -d apc.enable_cli=1 -d apc.serializer=php -P --show-diff --set-timeout 120
+        REPORT_EXIT_STATUS=1 php -n run-tests.php -n -d extension_dir=./modules/ -d extension=apcu.so -d apc.enable_cli=1 -d apc.serializer=default -d opcache.enable_cli=1 -P --show-diff --set-timeout 120
+        REPORT_EXIT_STATUS=1 php -n run-tests.php -n -d extension_dir=./modules/ -d extension=apcu.so -d apc.enable_cli=1 -d apc.serializer=php -d opcache.enable_cli=1 -P --show-diff --set-timeout 120
+        phpize --clean
+        phpize
+        ./configure --enable-apcu-debug --disable-apcu-rwlocks
+        make
+        REPORT_EXIT_STATUS=1 php -n run-tests.php -n -d extension_dir=./modules/ -d extension=apcu.so -d apc.enable_cli=1 -d apc.serializer=default -P --show-diff --set-timeout 120
+        REPORT_EXIT_STATUS=1 php -n run-tests.php -n -d extension_dir=./modules/ -d extension=apcu.so -d apc.enable_cli=1 -d apc.serializer=php -P --show-diff --set-timeout 120
+        REPORT_EXIT_STATUS=1 php -n run-tests.php -n -d extension_dir=./modules/ -d extension=apcu.so -d apc.enable_cli=1 -d apc.serializer=default -d opcache.enable_cli=1 -P --show-diff --set-timeout 120
+        REPORT_EXIT_STATUS=1 php -n run-tests.php -n -d extension_dir=./modules/ -d extension=apcu.so -d apc.enable_cli=1 -d apc.serializer=php -d opcache.enable_cli=1 -P --show-diff --set-timeout 120
+        # Run under valgrind with default configuration
+        if [ -n "$USE_VALGRIND" ]; then REPORT_EXIT_STATUS=1 php -n run-tests.php -m -n -d extension_dir=./modules/ -d extension=apcu.so -d apc.enable_cli=1 -P --show-diff --set-timeout 120; fi
